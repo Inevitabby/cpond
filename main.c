@@ -5,6 +5,7 @@
 #include <time.h>
 #include <string.h>
 #include <locale.h>
+#include <math.h>
 
 #include "draw.h"
 #include "fish.h"
@@ -13,6 +14,13 @@
 #include "utils.h"
 #include "braille.h"
 
+// How far outside screen bounds a target can be picked (fraction of width/width)
+#define OVERSHOOT_FRACTION 8 
+// Max turn angle when picking a new target
+#define MAX_TURN_DOT -0.67f
+// # of attempts to find a target before just picking a random point
+#define TARGET_ATTEMPTS 21
+
 int width;
 int height;
 
@@ -20,6 +28,21 @@ int width_in_ch;
 int height_in_ch;
 
 enum flagsWithArgs {SET_FISH_COUNT, SET_FPS, NONE};
+
+Point pick_target(Fish* fish, int w, int h, int pad) {
+	Point cur_dir = point_sub(fish->target, fish->start);
+	for (int attempts = 0; attempts < TARGET_ATTEMPTS; attempts++) {
+		Point t = { rand() % w - pad, rand() % h - pad };
+		Point new_dir = point_sub(t, fish->head->p);
+		float dot = cur_dir.x * new_dir.x + cur_dir.y * new_dir.y;
+		float mag = sqrtf(
+			(cur_dir.x*cur_dir.x + cur_dir.y*cur_dir.y) *
+			(new_dir.x*new_dir.x + new_dir.y*new_dir.y)
+		);
+		if (mag == 0 || dot > MAX_TURN_DOT * mag) return t;
+	}
+	return (Point){ rand() % w - pad, rand() % h - pad };
+}
 
 int main(int argc, char* argv[]) {
 	
@@ -164,20 +187,20 @@ int main(int argc, char* argv[]) {
 			if (!pause) {
 				atTarget = fish_swim(fish);
 			}
-			// choose new random target if reached target
+                        // choose new random target if reached target
 			if (atTarget) {
+				Point t;
 				if (!braille_flag) {
-					t.x = rand() % width;
-					t.y = rand() % height;
-				}
-				else {
-					t.x = rand() % braille_grid_width;
-					t.y = rand() % braille_grid_height;
+					int pad = width / OVERSHOOT_FRACTION;
+					t = pick_target(fish, width + pad * 2, height + pad * 2, pad);
+				} else {
+					int pad = braille_grid_width / OVERSHOOT_FRACTION;
+					t = pick_target(fish, braille_grid_width + pad * 2, braille_grid_height + pad * 2, pad);
 				}
 				fish_target(fish, t);
 			}
 
-			fish_draw(fish);
+                        fish_draw(fish);
 
 			if (braille_flag) {
 				draw_braille_screen(braille_screen);
